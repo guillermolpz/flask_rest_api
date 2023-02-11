@@ -1,0 +1,22 @@
+{% extends 'base.html' %}
+
+{% block title%} 
+Iniciar sesion
+{% endblock %}
+
+{% block body %}
+<form method="POST" action="/login">
+    <label for="">Iniciar sesion</label>
+    <div class="mb-3">
+        <label class="form-label" for="username">Usuario</label>
+        <input type="text" class="form-control" id="username" placeholder="Usuario" name="username" required>   
+    </div>
+    <div class="mb-3">
+        <label class="form-label" for="password">Contraseña</label>
+        <input type="password" class="form-control" id="password" placeholder="Contraseña" name="password" required>   
+    </div>
+    <button type="submit" class="btn btn-primary">Iniciar</button>
+</form>
+<span>¿No tienes usuario?</span>
+<a href="/registro">Registrarse</a>
+{% endblock %}

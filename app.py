@@ -1,5 +1,5 @@
-from flask import Flask, jsonify, request
-from db import session, engine, connection_db
+from flask import Flask, jsonify, request, render_template, redirect, url_for, session
+from db import Session, engine, connection_db
 #from models import Usuario
 import json
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -8,7 +8,8 @@ import datetime
 from functools import wraps
 from flask_sqlalchemy import SQLAlchemy
 
-session = session()
+from api.controllers import bp_api
+import requests
 
 app = Flask(__name__)
 
@@ -18,12 +19,11 @@ app.config['SECRET_KEY'] = 'Th1s1ss3cr3t'
 app.config['SQLALCHEMY_DATABASE_URI'] = connection_db
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
+session_bd = Session()
+
+app.register_blueprint(bp_api)
 
 from models import *
-
-@app.route('/hola', methods=['GET'])
-def hola():
-    return jsonify({'mensaje': 'Endpoint desde hola'})
 
 def token_required(f):
     @wraps(f)
@@ -31,21 +31,64 @@ def token_required(f):
 
         token = None
 
-        if 'x-access-tokens' in request.headers:
-            token = request.headers['x-access-tokens']
+        #if 'x-access-tokens' in request.headers:
+        #    token = request.headers['x-access-tokens']
 
-        if not token:
-            return jsonify({'message': 'a valid token is missing'})
+        #if not token:
+        #    return jsonify({'message': 'a valid token is missing'})
 
         try:
-            data = jwt.decode(token, app.config['SECRET_KEY'], options={"verify_signature": False})
+            data = jwt.decode(session["token"], app.config['SECRET_KEY'], options={"verify_signature": False})
             #current_user = Users.query.filter_by(public_id=data['public_id']).first()
+            print("Esta iniciando")
         except:
-            return jsonify({'message': 'token is invalid'})
-        return f(data['public_id'],*args, **kwargs)
+            #return jsonify({'message': 'token is invalid'})
+            print("El token no es valido o no esta logueado")
+            return redirect(url_for('login'))
+        #return f(data['public_id'],*args, **kwargs)
+        return f(*args, **kwargs)
         #return f(current_user, *args, **kwargs)
     return decorator
 
+@app.route('/', methods=['GET'])
+@token_required
+def index():
+    return render_template('index.html')
+
+@app.route('/index2', methods=['GET'])
+def index2():
+    return render_template('index2.html')
+
+@app.route('/hola', methods=['GET'])
+def hola():
+    return jsonify({'mensaje': 'Endpoint desde hola'})
+
+@app.route('/login', methods=['GET','POST'])
+def login():
+    if request.method=='POST':
+        username = request.form["username"]
+        password = request.form["password"]
+        args = {
+            "username":username,
+            "password":password
+        }
+        response = requests.post('http://localhost:5000/Api/Methods/Login/', json=args)
+        #print(dir(response))
+        if response.status_code == 200:
+            response_api = json.loads(response.text)
+            session['token'] = response_api['token']
+            #print(response_api)
+            return render_template('index.html')
+        else:
+            return render_template('login.html')
+    return render_template('login.html')
+
+@app.route('/logout', methods=['GET'])
+def logout():
+    session.clear()
+    return render_template('login.html')
+        
+"""
 @app.route('/login', methods=['GET', 'POST'])  
 def login_user(): 
  
@@ -66,7 +109,26 @@ def login_user():
 
     #return make_response('could not verify',  401, {'WWW.Authentication': 'Basic realm: "login required"'})
     return jsonify({'respuesta': 'Login requerido'})
+"""
 
+@app.route('/registro', methods=['GET','POST'])
+def registro():
+    if request.method=='POST':
+        username = request.form["username"]
+        password = request.form["password"]
+        args = {
+            "username":username,
+            "password":password
+        }
+        response = requests.post('http://localhost:5000/create_user', json=args)
+        #print(dir(response))
+        if response.status_code == 200:
+            return render_template('index.html')
+        else:
+            return render_template('registro.html')
+    return render_template('registro.html')
+ 
+"""  
 @app.route('/create_user', methods=['POST'])
 #@token_required
 def create_user():
@@ -91,12 +153,13 @@ def create_user():
     with engine.connect() as con:
         hash_password = generate_password_hash(data["password"],method="sha256")
         nuevo_usuario = Usuario(username=data["username"], password=hash_password)
-        session.add(nuevo_usuario)
+        session_bd.add(nuevo_usuario)
         try:
-            session.commit()
+            session_bd.commit()
         except:
             return jsonify({"respuesta":"El usuario ya esta creado en la BD"})
     return jsonify({"respuesta":"Usuario creado correctamente"})
+"""
 
 @app.route('/obtener_venta', methods=['GET'])
 @token_required
@@ -142,7 +205,7 @@ def editar_venta():
     
     venta = Ventas.query.get(data["id"])
     venta.venta = data["valor"]
-    db.session.commit()
+    db.session_bd.commit()
     return jsonify({"Respuesta":"Venta actualiada"})
 
 @app.route('/ventas', methods=['POST'])
@@ -156,8 +219,8 @@ def crear_venta():
         return jsonify({"Respuesta":"La venta producto no fue enviada en la petición"})
     
     nueva_venta = Ventas(username_id=data['user_id'],venta=data['venta'],venta_product=data['venta_product'])
-    db.session.add(nueva_venta)
-    db.session.commit()
+    db.session_bd.add(nueva_venta)
+    db.session_bd.commit()
     return jsonify({"Respuesta":"Venta creada"})
 
 @app.route('/ventas', methods=['DELETE'])
@@ -167,8 +230,8 @@ def ELIMINAR_venta():
         return jsonify({"Respuesta":"El id de la venta no esta en la peticion"})
     
     venta = Ventas.query.get(data["id"])
-    db.session.delete(venta)
-    db.session.commit()
+    db.session_bd.delete(venta)
+    db.session_bd.commit()
     return jsonify({"Respuesta":"Venta eliminada"})
     
 if __name__ == "__main__":
